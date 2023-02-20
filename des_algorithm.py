@@ -60,7 +60,7 @@ def permutation(matrix, block):
 
 
 def key_generator():
-# iF THE USER HAS ALREADY A KEY HE CAN USE IT. iF NOT IT'S GOING TO BE RANDOM GENERATED
+# iF THE USER HAS ALREADY A KEY HE CAN USE IT. iF NOT IT'S GOING TO BE RANDOMLY GENERATED
 
     print("""\nIf you have and want to use a specific 64-bit key select y.\nOtherwise the program is going to create a random key for you.""")
     key_existance = str(input("Do you have an existing key? (y/n) "))
@@ -74,11 +74,13 @@ def key_generator():
             key += str(bit_value)
     return key
 
-def left_shift_join(cn, dn, step):
+
+def left_shift_join(cn, dn, step=2):
     cn_1 = cn[step:] + cn[:step]
     dn_1 = cn[step:] + dn[:step]
     cn_dn_1 = cn_1 + dn_1
     return cn_dn_1
+
 
 def xor_operation(value1, value2):
     for bit in range(len(value1)):
@@ -92,6 +94,20 @@ def xor_operation(value1, value2):
             xor_result += "0"
     return xor_result
 
+
+def subkeys_generation(key_56_bit):
+    c0 = key_56_bit[:28]
+    d0 = key_56_bit[28:]
+    for shift in range(16):
+        if shift in (0, 1, 8, 15):
+            cn_dn = left_shift_join(c0, d0)
+        else:
+            cn_dn = left_shift_join(c0, d0, 2)
+        
+        key_name = "k" + str(shift+1)
+        key_value = permutation(pc_2_matrix, cn_dn)
+        subkeys[key_name] = key_value
+    
 
 def feistel(rn, kn):
     expansion = permutation(expansion_P_box, rn)
@@ -112,22 +128,45 @@ def feistel(rn, kn):
         x_coordinate_value = int(value[0] + value[5], 2)
         y_coordinate_value = int(value[1:5], 2)
         position = x_coordinate_value + 16*y_coordinate_value
+
         # Me falta cambiar la salida que es int a binario.
+        # Ya sólo revisa que esté correcto.
         x_box_output = (s_boxes[x])[position]
 
         x_boxes_output += bin(x_box_output)[2:]
 
         x +=1
 
+# Eliminar el print
     print(len(x_boxes_output))
-    fesitel_output = permutation(straight_P_box, x_boxes_output)
+    feistel_output = permutation(straight_P_box, x_boxes_output)
 
-    return fesitel_output
+    return feistel_output
     
 
-def cipher_round(ln, rn, kn):
-    ln_1 = rn
+def cipher_rounds(li, ri):
+# This function makes 2 operations per cicle: a) ln = rn-1  b) ln-1 XOR feistel(rn-1, k1)
+
+    for subkey, value in subkeys.items():
+        ln = ri
+        feistel_output = feistel(ri, value)
+
+        rn = xor_operation(li, feistel_output)
+
+        # After completing a round it's necesary to reasign li and ri so the next round works with the new values.
+        # The 'n' subindex is equivalent to the kn subkey subindex. So when we reach the last lap of the loop the index would be 16. 
+        li = ln
+        ri = rn
+    l16_r16 = li + ri
+
+    return l16_r16
+
+
+def inverse_permutation(matrix, block):
+# This will work for moments when theres no repetition ? Can we change that?
+
     pass
+
 
 def run():
     print(instructions)
@@ -135,7 +174,8 @@ def run():
     try:
         option = int(input("Select a number: "))
         if option == 1:
-            
+            cypher_text = ""
+
             # key_64_bit = key_generator()
             key_64_bit = "0010110111111111011010111010000000010100101101010101001011000000"
             
@@ -150,30 +190,39 @@ def run():
             c0 = key_56_bit[:28]
             d0 = key_56_bit[28:]
 
-            # Now we can start the rounds
-            
+            # Now it's time to generate a dictionary that contains all the 16 subkeys.
+            subkeys_generation(key_56_bit)
+
+            # Now we can start the rounds 
             message_decrypted = str(input("Write your plaitext message: "))
+
+            # Now we create a dict with the following structur: Blocki as key : 64-bit block as value.
             dict_block64_generator(message_decrypted)
 
             for key, value in block_64_bits.items(): # It's going to encrypt each 64-bit block.
 
                 # The first step is to make the Initial Permutation:
-                print(key, plaintext_to_binary(value))
                 ip = permutation(ip_matrix, plaintext_to_binary(value))
-                print("IP permutation:", ip)
 
                 # The next step is to divide the 64-bit block in 2 32-bit blocks (L0 and R0)
-                left0 = ip[:32]
-                right0 = ip[32:]
-
-                # The next step is to make the left shift and join c0 and d0 after the shift
-                c1_d1 = left_shift_join(c0, d0, 1)
-
-                # The next step is to make the Permuted Choice 2 to obtain the subkey.
-                k1 = permutation(pc_2_matrix, c1_d1)
+                l0 = ip[:32]
+                r0 = ip[32:]
 
                 # After this it's time to start the 16 rounds. This is the first one.
-                cipher_round(left0, right0, k1)
+                l16_r16 = cipher_rounds(l0, r0)
+
+                # The next step is to swap the first 32 bits to be the last 32 bits of the block.
+                r16_l16 = l16_r16[:32] + l16_r16[32:]
+
+                # To complete the cipher block bit arrange we have to do an inverse permutation with the IP_matrix.
+                cypher_binary_block = inverse_permutation(ip_matrix, r16_l16)
+
+                # Finally the only thing left is to convert the 64-bit cypher block to ascii characters.
+                cypher_block = binary_to_plaintext(cypher_binary_block)
+
+                cypher_text += cypher_block
+
+            print(cypher_text)
 
     
         elif option == 2:
@@ -186,6 +235,11 @@ def run():
     except ValueError:
         print("That's not a valid option.\nTry again!")
 
+
+        
+
+
+subkeys = {}
 
 ip_matrix = [58, 50, 42, 34, 26, 18, 10, 2,
              60, 52, 44, 36, 28, 20, 12, 4,
@@ -219,24 +273,52 @@ s_box_1 = [14, 4, 13, 1, 2, 15, 11, 8, 3, 10, 6, 12, 5, 9, 0, 7,
            4, 1, 14, 8, 13, 6, 2, 11, 15, 12, 9, 7, 3, 10, 5, 0,
            15, 12, 8, 2, 4, 9, 1, 7, 5, 11, 3, 14, 10, 0, 6, 13]
 
-s_box_2 = []
+s_box_2 = [15, 1, 8, 14, 6, 11, 3, 4, 9, 7, 2, 13, 12, 0, 5, 10,
+           3, 13, 4, 7, 15, 2, 8, 14, 12, 0, 1, 10, 6, 9, 11, 5,
+           0, 14, 7, 11, 10, 4, 13, 1, 5, 8, 12, 6, 9, 3, 2, 15,
+           13, 8, 10, 1, 3, 15, 4, 2, 11, 6, 7, 12, 0, 5, 14, 9]
 
-s_box_3 = []
+s_box_3 = [10, 0, 9, 14, 6, 3, 15, 5, 1, 13, 12, 7, 11, 4, 2, 8,
+           13, 7, 0, 9, 3, 4, 6, 10, 2, 8, 5, 14, 12, 11, 15, 1,
+           13, 6, 4, 9, 8, 15, 3, 0, 11, 1, 2, 12, 5, 10, 14, 7,
+           1, 10, 13, 0, 6, 9, 8, 7, 4, 15, 14, 3, 11, 5, 2, 12]
 
-s_box_4 = []
+s_box_4 = [7, 13, 14, 3, 0, 6, 9, 10, 1, 2, 8, 5, 11, 12, 4, 15,
+           13, 8, 11, 5, 6, 15, 0, 3, 4, 7, 2, 12, 1, 10, 14, 9,
+           10, 6, 9, 0, 12, 11, 7, 13, 15, 1, 3, 14, 5, 2, 8, 4,
+           3, 15, 0, 6, 10, 1, 13, 8, 9, 4, 5, 11, 12, 7, 2, 14]
 
-s_box_5 = []
+s_box_5 = [2, 12, 4, 1, 7, 10, 11, 6, 8, 5, 3, 15, 13, 0, 14, 9,
+           14, 11, 2, 12, 4, 7, 13, 1, 5, 0, 15, 10, 3, 9, 8, 6,
+           4, 2, 1, 11, 10, 13, 7, 8, 15, 9, 12, 5, 6, 3, 0, 14,
+           11, 8, 12, 7, 1, 14, 2, 13, 6, 15, 0, 9, 10, 4, 5, 3]
 
-s_box_6 = []
+s_box_6 = [12, 1, 10, 15, 9, 2, 6, 8, 0, 13, 3, 4, 14, 7, 5, 11,
+           10, 15, 4, 2, 7, 12, 9, 5, 6, 1, 13, 14, 0, 11, 3, 8,
+           9, 14, 15, 5, 2, 8, 12, 3, 7, 0, 4, 10, 1, 13, 11, 6,
+           4, 3, 2, 12, 9, 5, 15, 10, 11, 14, 1, 7, 6, 0, 8, 13]
 
-s_box_7 = []
+s_box_7 = [4, 11, 2, 14, 15, 0, 8, 13, 3, 12, 9, 7, 5, 10, 6, 1,
+           13, 0, 11, 7, 4, 9, 1, 10, 14, 3, 5, 12, 2, 15, 8, 6,
+           1, 4, 11, 13, 12, 3, 7, 14, 10, 15, 6, 8, 0, 5, 9, 2,
+           6, 11, 13, 8, 1, 4, 10, 7, 9, 5, 0, 15, 14, 2, 3, 12]
 
-s_box_8 = []
+s_box_8 = [13, 2, 8, 4, 6, 15, 11, 1, 10, 9, 3, 14, 5, 0, 12, 7,
+           1, 15, 13, 8, 10, 3, 7, 4, 12, 5, 6, 11, 0, 14, 9, 2,
+           7, 11, 4, 1, 9, 12, 14, 2, 0, 6, 10, 13, 15, 3, 5, 8,
+           2, 1, 14, 7, 4, 10, 8, 13, 15, 12, 9, 0, 3, 5, 6, 11]
 
 s_boxes = [s_box_1, s_box_2, s_box_3, s_box_4,
            s_box_5, s_box_6, s_box_7, s_box_8]
 
-straight_P_box = []
+straight_P_box = [16, 7, 20, 21,
+                  29, 12, 28, 17,
+                  1, 15, 23, 26,
+                  5, 18, 31, 10,
+                  2, 8, 24, 14,
+                  32, 27, 3, 9,
+                  19, 13, 30, 6,
+                  22, 11, 4, 25]
 
 block_64_bits = {}
 
