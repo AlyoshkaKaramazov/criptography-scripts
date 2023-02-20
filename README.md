@@ -24,4 +24,4 @@ Here i can write something that acts as a link.
 
 Here i add an image.
 
-## ![Manu Chao](image link)
+## ![Tatoo](https://github.com/AlyoshkaKaramazov/html-css-course/blob/master/classImages/pics/tinified/joker.jpg)
