@@ -19,6 +19,7 @@ def plaintext_to_binary(plaintext_input):
         padding = 10 - len(binary_value)
         binary_value = "0"*padding + binary_value[2:]
         binary_message += binary_value
+        hola = type(binary_message)
     return binary_message
 
 
@@ -83,13 +84,14 @@ def left_shift_join(cn, dn, step=2):
 
 
 def xor_operation(value1, value2):
+    xor_result = ""
+
     for bit in range(len(value1)):
         a = bool(int(value1[bit]))
-        b = bool(int(value2[bit]))
-        xor_result = ""
+        b = bool(int(value2[bit]))    
+
         if a^b == True:
             xor_result += "1"
-        
         else:
             xor_result += "0"
     return xor_result
@@ -113,10 +115,10 @@ def feistel(rn, kn):
     expansion = permutation(expansion_P_box, rn)
     input_sboxes = xor_operation(expansion, kn)
     s_box_dict = {}
-    
+    bit=0
     # Here I'm creating a dict that stores the expansion output divided in 8 groups of 6 bits.
-    for bit in range(8):
-        s_box_key = "B" + str(bit)
+    for i in range(8):
+        s_box_key = "B" + str(i)
         s_box_value = input_sboxes[bit:bit+6]
         s_box_dict[s_box_key] = s_box_value
         bit += 6
@@ -125,27 +127,28 @@ def feistel(rn, kn):
     x = 0
     x_boxes_output = ""
     for key, value in s_box_dict.items():
-        x_coordinate_value = int(value[0] + value[5], 2)
-        y_coordinate_value = int(value[1:5], 2)
+        y_coordinate_value = int(value[0] + value[5], 2)
+        x_coordinate_value = int(value[1:5], 2)
         position = x_coordinate_value + 16*y_coordinate_value
 
-        # Me falta cambiar la salida que es int a binario.
-        # Ya sólo revisa que esté correcto.
-        x_box_output = (s_boxes[x])[position]
+        x_box_output = str(bin((s_boxes[x])[position])[2:])
+        x_box_output = "0"*(4-len(x_box_output)) + x_box_output 
 
-        x_boxes_output += bin(x_box_output)[2:]
+        x_boxes_output += x_box_output
 
         x +=1
 
-# Eliminar el print
-    print(len(x_boxes_output))
-    feistel_output = permutation(straight_P_box, x_boxes_output)
+    feistel_output = permutation(straight_P_box, str(x_boxes_output))
 
     return feistel_output
     
 
-def cipher_rounds(li, ri):
+def cipher_rounds(li, ri, inverse=False):
 # This function makes 2 operations per cicle: a) ln = rn-1  b) ln-1 XOR feistel(rn-1, k1)
+
+    if inverse == True:
+        # Hacer el proceso inverso.
+        pass
 
     for subkey, value in subkeys.items():
         ln = ri
@@ -163,9 +166,15 @@ def cipher_rounds(li, ri):
 
 
 def inverse_permutation(matrix, block):
-# This will work for moments when theres no repetition ? Can we change that?
+# This function accepts the matrix indexes to form ip and reverse it.
 
-    pass
+    modified_block = ""
+    for bit in range(len(matrix)):
+        modified_block += block[matrix.index(bit+1)]
+    
+    return modified_block
+
+    
 
 
 def run():
@@ -199,6 +208,8 @@ def run():
             # Now we create a dict with the following structur: Blocki as key : 64-bit block as value.
             dict_block64_generator(message_decrypted)
 
+# Check if we can build a function for encrypting each block. like cypher_block!
+
             for key, value in block_64_bits.items(): # It's going to encrypt each 64-bit block.
 
                 # The first step is to make the Initial Permutation:
@@ -208,7 +219,11 @@ def run():
                 l0 = ip[:32]
                 r0 = ip[32:]
 
-                # After this it's time to start the 16 rounds. This is the first one.
+
+# Till this point there aren't any mistakes.
+
+
+                # After this it's time to start the 16 rounds.
                 l16_r16 = cipher_rounds(l0, r0)
 
                 # The next step is to swap the first 32 bits to be the last 32 bits of the block.
