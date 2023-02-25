@@ -19,7 +19,7 @@ def plaintext_to_binary(plaintext_input):
         padding = 10 - len(binary_value)
         binary_value = "0"*padding + binary_value[2:]
         binary_message += binary_value
-        hola = type(binary_message)
+        
     return binary_message
 
 
@@ -67,13 +67,17 @@ def key_generator():
     key_existance = str(input("Do you have an existing key? (y/n) "))
 
     if key_existance == "y":
-        key = str(input("Write your key: "))
+        key = str(input("Write your 64-bit key: "))
     else:
         key = ""
         for bit in range(64):
             bit_value = random.randrange(2)
             key += str(bit_value)
+        print("\nThis is your random 64.bit key:")
+        print(key)
+
     return key
+        
 
 
 def left_shift_join(cn, dn, step=2):
@@ -98,6 +102,7 @@ def xor_operation(value1, value2):
 
 
 def subkeys_generation(key_56_bit):
+    # Agregar descripción de la función.
     c0 = key_56_bit[:28]
     d0 = key_56_bit[28:]
     for shift in range(16):
@@ -146,13 +151,9 @@ def feistel(rn, kn):
 def cipher_rounds(li, ri, inverse=False):
 # This function makes 2 operations per cicle: a) ln = rn-1  b) ln-1 XOR feistel(rn-1, k1)
 
-    if inverse == True:
-        # Hacer el proceso inverso.
-        pass
-
-    for subkey, value in subkeys.items():
+    for subkey_name, subkey_value in subkeys.items():
         ln = ri
-        feistel_output = feistel(ri, value)
+        feistel_output = feistel(ri, subkey_value)
 
         rn = xor_operation(li, feistel_output)
 
@@ -165,6 +166,24 @@ def cipher_rounds(li, ri, inverse=False):
     return l16_r16
 
 
+def cipher_rounds_inverse(li, ri):
+# This function makes 2 operations per cicle: a) ln = rn-1  b) ln-1 XOR feistel(rn-1, k1)
+
+    for subkey_index in range(16):
+        subkey_name = "k" + str(16-subkey_index)
+        subkey = subkeys.get(subkey_name)
+        rn = li
+        feistel_output = feistel(rn, subkey)
+
+        ln = xor_operation(ri, feistel_output)
+
+        li = ln
+        ri = rn
+    lo_r0 = li + ri
+
+    return lo_r0
+
+
 def inverse_permutation(matrix, block):
 # This function accepts the matrix indexes to form ip and reverse it.
 
@@ -174,7 +193,98 @@ def inverse_permutation(matrix, block):
     
     return modified_block
 
+
+def cypher_text():
+    cypher_text = ""
+    key_64_bit = "0010110111111111011010111010000000010100101101010101001011000000"
+    # key_64_bit = key_generator()
     
+    #Now the 64-bit key has to transform with the Permuted Choice-1
+    key_56_bit = ""
+    for i in range(1, len(key_64_bit)+1):
+        if i % 8 == 0:
+            continue
+        key_56_bit += key_64_bit[i-1] 
+
+    # Now it's time to generate a dictionary that contains all the 16 subkeys.
+    subkeys_generation(key_56_bit)
+
+    # Now we can start the rounds 
+    message_plaintext = str(input("Write your plaitext message: "))
+
+    # Now we create a dict with the following structure: Block as key : 64-bit block as value.
+    dict_block64_generator(message_plaintext)
+
+    for key, value in block_64_bits.items(): # It's going to encrypt each 64-bit block.
+
+        # The first step is to make the Initial Permutation:
+        ip = permutation(ip_matrix, plaintext_to_binary(value))
+
+        # The next step is to divide the 64-bit block in 2 32-bit blocks (L0 and R0)
+        l0 = ip[:32]
+        r0 = ip[32:]
+
+
+        # After this it's time to start the 16 rounds.
+        l16_r16 = cipher_rounds(l0, r0)
+
+        # The next step is to swap the first 32 bits to be the last 32 bits of the block.
+        r16_l16 = l16_r16[:32] + l16_r16[32:]
+
+        # To complete the cipher block bit arrange we have to do an inverse permutation with the IP_matrix.
+        cypher_binary_block = inverse_permutation(ip_matrix, r16_l16)
+
+        # Finally the only thing left is to convert the 64-bit cypher block to ascii characters.
+        cypher_block = binary_to_plaintext(cypher_binary_block)
+
+        cypher_text += cypher_block
+
+    print(cypher_text)
+
+
+def descypher_text():
+    descypher_text = ""
+    message_plaintext_cypher = str(input("Write your encrypted message: "))
+    key_64_bit = str(input("Write your 64-bit key: "))
+
+    key_56_bit = ""
+    for i in range(1, len(key_64_bit)+1):
+        if i % 8 == 0:
+            continue
+        key_56_bit += key_64_bit[i-1] 
+        
+    dict_block64_generator(message_plaintext_cypher)
+
+    key_64_bit = "0010110111111111011010111010000000010100101101010101001011000000"
+    # key_64_bit = key_generator()
+    
+    #Now the 64-bit key has to transform with the Permuted Choice-1
+    key_56_bit = ""
+    for i in range(1, len(key_64_bit)+1):
+        if i % 8 == 0:
+            continue
+        key_56_bit += key_64_bit[i-1] 
+
+    # Now it's time to generate a dictionary that contains all the 16 subkeys.
+    subkeys_generation(key_56_bit)
+
+    for key, value in block_64_bits.items(): # It's going to decrypt each 64-bit block.
+
+        r16_l16 = permutation(ip_matrix, plaintext_to_binary(value))
+
+        l16 = r16_l16[32:]
+        r16 = r16_l16[:32]
+
+        # Empiezan las 16 rondas inversas.
+        l0_r0 = cipher_rounds_inverse(l16, r16)
+
+        decypher_binary_block = inverse_permutation(ip_matrix, l0_r0)
+
+        decypher_block = binary_to_plaintext(decypher_binary_block)
+
+        descypher_text += decypher_block
+
+    print(descypher_text)
 
 
 def run():
@@ -183,67 +293,10 @@ def run():
     try:
         option = int(input("Select a number: "))
         if option == 1:
-            cypher_text = ""
-
-            # key_64_bit = key_generator()
-            key_64_bit = "0010110111111111011010111010000000010100101101010101001011000000"
-            
-            #Now the 64-bit key has to transform with the Permuted Choice-1
-            key_56_bit = ""
-            for i in range(1, len(key_64_bit)+1):
-                if i % 8 == 0:
-                    continue
-                key_56_bit += key_64_bit[i-1] 
-            
-            # Now the 56-bit key divides into C0 and D0
-            c0 = key_56_bit[:28]
-            d0 = key_56_bit[28:]
-
-            # Now it's time to generate a dictionary that contains all the 16 subkeys.
-            subkeys_generation(key_56_bit)
-
-            # Now we can start the rounds 
-            message_decrypted = str(input("Write your plaitext message: "))
-
-            # Now we create a dict with the following structur: Blocki as key : 64-bit block as value.
-            dict_block64_generator(message_decrypted)
-
-# Check if we can build a function for encrypting each block. like cypher_block!
-
-            for key, value in block_64_bits.items(): # It's going to encrypt each 64-bit block.
-
-                # The first step is to make the Initial Permutation:
-                ip = permutation(ip_matrix, plaintext_to_binary(value))
-
-                # The next step is to divide the 64-bit block in 2 32-bit blocks (L0 and R0)
-                l0 = ip[:32]
-                r0 = ip[32:]
-
-
-# Till this point there aren't any mistakes.
-
-
-                # After this it's time to start the 16 rounds.
-                l16_r16 = cipher_rounds(l0, r0)
-
-                # The next step is to swap the first 32 bits to be the last 32 bits of the block.
-                r16_l16 = l16_r16[:32] + l16_r16[32:]
-
-                # To complete the cipher block bit arrange we have to do an inverse permutation with the IP_matrix.
-                cypher_binary_block = inverse_permutation(ip_matrix, r16_l16)
-
-                # Finally the only thing left is to convert the 64-bit cypher block to ascii characters.
-                cypher_block = binary_to_plaintext(cypher_binary_block)
-
-                cypher_text += cypher_block
-
-            print(cypher_text)
-
+          cypher_text()
     
         elif option == 2:
-            message_encrypted = str(input("Write your encrypted message: "))
-            print(binary_to_plaintext(message_encrypted))
-
+            descypher_text()
         else:
             print("That's not a valid option.\nTry again!")
 
@@ -339,3 +392,4 @@ block_64_bits = {}
 
 if __name__ == "__main__":
     run()
+
